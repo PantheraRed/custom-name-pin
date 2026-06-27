@@ -1,0 +1,7 @@
+{
+  "face":       { "x": 0, "y": 0, "rotation": 0, "sx": 1, "sy": 1 },
+  "hand_left":  { "x": 0, "y": 0, "rotation": 0, "sx": 1, "sy": 1 },
+  "hand_right": { "x": 0, "y": 0, "rotation": 0, "sx": 1, "sy": 1 },
+  "board":      { "x": 0, "y": 0, "rotation": 0, "sx": 1, "sy": 1, "color": "#ffffff" },
+  "text":       { "x": 500, "y": 500, "content": "", "color": "#000000", "font": "Nougat", "size": 72, "rotation": 0 }
+}

@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Custom Name Pin</title>
+
+<style>
+body {
+    margin: 20px;
+    font-family: sans-serif;
+}
+
+#app {
+    display: flex;
+    gap: 20px;
+}
+
+#canvas {
+    border: 1px solid black;
+}
+
+#controls {
+    width: 300px;
+    overflow-y: auto;
+    max-height: calc(100vh - 40px);
+}
+
+input,
+select,
+button {
+    width: 100%;
+    margin-bottom: 8px;
+    box-sizing: border-box;
+}
+
+.row {
+    display: flex;
+    gap: 8px;
+}
+
+.row input,
+.row select {
+    flex: 1;
+    margin-bottom: 8px;
+}
+
+.row-color {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.row-color input[type="color"] {
+    width: 48px;
+    flex-shrink: 0;
+    padding: 2px;
+    margin-bottom: 0;
+}
+
+.row-color input[type="text"],
+.row-color input[type="number"],
+.row-color select {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.rotation-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.rotation-row input[type="range"] {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.rotation-row span {
+    width: 40px;
+    text-align: right;
+    font-size: 13px;
+    flex-shrink: 0;
+}
+
+.lock-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 13px;
+}
+
+.lock-row input[type="checkbox"] {
+    width: auto;
+    margin-bottom: 0;
+}
+
+.grad-editor {
+    user-select: none;
+    margin-bottom: 8px;
+}
+.grad-track {
+    position: relative;
+    width: 100%;
+    box-sizing: border-box;
+}
+.grad-bar {
+    width: 100%;
+    height: 20px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    cursor: crosshair;
+    box-sizing: border-box;
+    display: block;
+}
+.grad-handles-area {
+    position: relative;
+    height: 28px;
+    width: 100%;
+    padding: 0 9px;
+    box-sizing: border-box;
+}
+.grad-handle {
+    position: absolute;
+    top: 0;
+    transform: translateX(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    cursor: grab;
+    touch-action: none;
+}
+.grad-handle-swatch {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #fff;
+    box-shadow: 0 0 0 1.5px #888;
+    box-sizing: border-box;
+}
+.grad-handle.selected .grad-handle-swatch {
+    box-shadow: 0 0 0 2px #0078d7;
+}
+.grad-handle-tip {
+    width: 0;
+    height: 0;
+    border-left: 5px solid transparent;
+    border-right: 5px solid transparent;
+    border-top: 6px solid #888;
+    margin-top: -1px;
+}
+.grad-handle.selected .grad-handle-tip {
+    border-top-color: #0078d7;
+}
+.grad-stop-controls {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 6px;
+    min-height: 28px;
+}
+.grad-stop-controls input[type="color"] {
+    width: 36px;
+    flex-shrink: 0;
+    padding: 2px;
+    margin-bottom: 0;
+}
+.grad-stop-controls input[type="number"] {
+    width: 60px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+}
+.grad-stop-controls button {
+    width: auto;
+    padding: 2px 8px;
+    margin-bottom: 0;
+    flex-shrink: 0;
+}
+.grad-stop-controls label {
+    font-size: 12px;
+    color: #888;
+    flex-shrink: 0;
+}
+.bg-opacity-slider {
+    flex: 1;
+    min-width: 40px;
+    margin-bottom: 0;
+}
+
+label.section {
+    font-size: 12px;
+    color: #888;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    display: block;
+    margin-bottom: 2px;
+}
+#layers-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 4px;
+}
+.layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fafafa;
+    cursor: grab;
+    user-select: none;
+}
+.layer-row.selected {
+    border-color: #0078d7;
+    background: #eaf3fc;
+}
+.layer-row.drag-over-top {
+    box-shadow: inset 0 2px 0 #0078d7;
+}
+.layer-row.drag-over-bottom {
+    box-shadow: inset 0 -2px 0 #0078d7;
+}
+.layer-row.dragging {
+    opacity: 0.4;
+}
+.layer-row-name {
+    flex: 1;
+    font-size: 13px;
+}
+.layer-row-btns {
+    display: flex;
+    gap: 2px;
+    flex-shrink: 0;
+}
+.layer-row-btns button {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    font-size: 12px;
+    line-height: 1;
+    cursor: pointer;
+}
+.layer-row-btns button:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+.export-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.export-row input[type="text"] {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+.export-row select {
+    width: 60px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+}
+.export-row button {
+    width: 32px;
+    flex-shrink: 0;
+    margin-bottom: 0;
+    padding: 0;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div id="app">
+
+    <canvas id="canvas" width="1000" height="1000"></canvas>
+
+    <div id="controls">
+
+        <h2>Brawler</h2>
+        <select id="brawler"></select>
+
+        <hr>
+
+        <h3>Layers</h3>
+        <div id="layers-panel"></div>
+
+        <hr>
+
+        <h3>Face</h3>
+        <label class="section">Position</label>
+        <div class="row">
+            <input id="face-x" type="number" placeholder="X">
+            <input id="face-y" type="number" placeholder="Y">
+        </div>
+        <label class="section">Scale</label>
+        <div class="row">
+            <input id="face-sx" type="number" placeholder="W" step="0.01" value="1">
+            <input id="face-sy" type="number" placeholder="H" step="0.01" value="1">
+        </div>
+        <div class="lock-row">
+            <input type="checkbox" id="face-lock" checked>
+            <label for="face-lock">Lock aspect ratio</label>
+        </div>
+        <label class="section">Rotation</label>
+        <div class="rotation-row">
+            <input id="face-rotation" type="range" min="-180" max="180" value="0" step="1">
+            <span id="face-rotation-val">0°</span>
+        </div>
+        <label class="section">Opacity</label>
+        <input id="face-opacity" type="range" min="0" max="1" step="0.01" value="1">
+
+        <hr>
+
+        <h3>Hand Left</h3>
+        <label class="section">Position</label>
+        <div class="row">
+            <input id="hand_left-x" type="number" placeholder="X">
+            <input id="hand_left-y" type="number" placeholder="Y">
+        </div>
+        <label class="section">Scale</label>
+        <div class="row">
+            <input id="hand_left-sx" type="number" placeholder="W" step="0.01" value="1">
+            <input id="hand_left-sy" type="number" placeholder="H" step="0.01" value="1">
+        </div>
+        <div class="lock-row">
+            <input type="checkbox" id="hand_left-lock" checked>
+            <label for="hand_left-lock">Lock aspect ratio</label>
+        </div>
+        <label class="section">Rotation</label>
+        <div class="rotation-row">
+            <input id="hand_left-rotation" type="range" min="-180" max="180" value="0" step="1">
+            <span id="hand_left-rotation-val">0°</span>
+        </div>
+        <label class="section">Opacity</label>
+        <input id="hand_left-opacity" type="range" min="0" max="1" step="0.01" value="1">
+
+        <hr>
+
+        <h3>Hand Right</h3>
+        <label class="section">Position</label>
+        <div class="row">
+            <input id="hand_right-x" type="number" placeholder="X">
+            <input id="hand_right-y" type="number" placeholder="Y">
+        </div>
+        <label class="section">Scale</label>
+        <div class="row">
+            <input id="hand_right-sx" type="number" placeholder="W" step="0.01" value="1">
+            <input id="hand_right-sy" type="number" placeholder="H" step="0.01" value="1">
+        </div>
+        <div class="lock-row">
+            <input type="checkbox" id="hand_right-lock" checked>
+            <label for="hand_right-lock">Lock aspect ratio</label>
+        </div>
+        <label class="section">Rotation</label>
+        <div class="rotation-row">
+            <input id="hand_right-rotation" type="range" min="-180" max="180" value="0" step="1">
+            <span id="hand_right-rotation-val">0°</span>
+        </div>
+        <label class="section">Opacity</label>
+        <input id="hand_right-opacity" type="range" min="0" max="1" step="0.01" value="1">
+
+        <hr>
+
+        <h3>Board</h3>
+        <label class="section">Position</label>
+        <div class="row">
+            <input id="board-x" type="number" placeholder="X">
+            <input id="board-y" type="number" placeholder="Y">
+        </div>
+        <label class="section">Scale</label>
+        <div class="row">
+            <input id="board-sx" type="number" placeholder="W" step="0.01" value="1">
+            <input id="board-sy" type="number" placeholder="H" step="0.01" value="1">
+        </div>
+        <div class="lock-row">
+            <input type="checkbox" id="board-lock" checked>
+            <label for="board-lock">Lock aspect ratio</label>
+        </div>
+        <label class="section">Rotation</label>
+        <div class="rotation-row">
+            <input id="board-rotation" type="range" min="-180" max="180" value="0" step="1">
+            <span id="board-rotation-val">0°</span>
+        </div>
+        <label class="section">Opacity</label>
+        <input id="board-opacity" type="range" min="0" max="1" step="0.01" value="1">
+        <input id="board-color" type="color" value="#ffffff" title="Board Color">
+
+        <hr>
+
+        <h3>Text</h3>
+        <input id="text-content" type="text" placeholder="Name…">
+        <label class="section">Position</label>
+        <div class="row">
+            <input id="text-x" type="number" placeholder="X">
+            <input id="text-y" type="number" placeholder="Y">
+        </div>
+        <div class="row-color">
+            <input id="text-color" type="color" value="#000000" title="Text Color">
+            <select id="text-font"></select>
+        </div>
+        <input id="text-size" type="number" placeholder="Size (px)" value="72" min="1">
+        <label class="section">Rotation</label>
+        <div class="rotation-row">
+            <input id="text-rotation" type="range" min="-180" max="180" value="0" step="1">
+            <span id="text-rotation-val">0°</span>
+        </div>
+        <label class="section">Opacity</label>
+        <input id="text-opacity" type="range" min="0" max="1" step="0.01" value="1">
+
+        <hr>
+
+        <hr>
+
+        <h3>Background</h3>
+        <select id="bg-type">
+            <option value="solid">Solid Fill</option>
+            <option value="gradient">Gradient Fill</option>
+        </select>
+
+        <div id="bg-solid-section">
+            <label class="section">Color</label>
+            <div class="row-color">
+                <input id="bg-solid-color" type="color" value="#ffffff">
+                <input id="bg-solid-opacity" type="range" min="0" max="1" step="0.01" value="1" title="Opacity">
+            </div>
+        </div>
+
+        <div id="bg-grad-section" style="display:none">
+            <label class="section">Type</label>
+            <select id="bg-grad-type">
+                <option value="linear">Linear</option>
+                <option value="radial">Radial</option>
+            </select>
+            <div id="bg-angle-row" class="rotation-row">
+                <input id="bg-angle" type="range" min="0" max="360" value="0" step="1">
+                <span id="bg-angle-val">0°</span>
+            </div>
+            <label class="section">Gradient</label>
+            <div class="grad-editor">
+                <div class="grad-track">
+                    <div class="grad-handles-area" id="bg-handles"></div>
+                    <div class="grad-bar" id="bg-grad-bar"></div>
+                </div>
+                <div class="grad-stop-controls" id="bg-stop-controls"></div>
+            </div>
+        </div>
+
+        <hr>
+
+        <div class="export-row">
+            <input id="export-filename" type="text" value="custom-name-pin" placeholder="filename">
+            <select id="export-format">
+                <option value="png">PNG</option>
+                <option value="jpg">JPG</option>
+            </select>
+            <button id="export-btn">⬇</button>
+        </div>
+        <button id="copy">Copy Config</button>
+
+    </div>
+
+</div>
+
+<script src="script.js"></script>
+
+</body>
+</html>
