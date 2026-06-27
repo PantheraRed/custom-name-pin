@@ -271,7 +271,17 @@ label.section {
     padding: 0;
     cursor: pointer;
 }
+.save-load-row {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 6px;
+}
+.save-load-row button {
+    flex: 1;
+    margin-bottom: 0;
+}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/lz-string/1.5.0/lz-string.min.js"></script>
 </head>
 
 <body>
@@ -461,6 +471,11 @@ label.section {
             </select>
             <button id="export-btn">⬇</button>
         </div>
+        <div class="save-load-row">
+            <button id="save-config">⬇ Save Config</button>
+            <button id="load-config">⬆ Load Config</button>
+        </div>
+        <button id="share-btn">🔗 Copy Share Link</button>
         <button id="copy">Copy Config</button>
 
     </div>

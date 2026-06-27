@@ -1162,6 +1162,119 @@ document.getElementById("export-btn").addEventListener("click", () => {
     }
 });
 
+// ── Full session save / load ──────────────────────────────────────────────────
+
+function buildFullConfig() {
+    return {
+        config: {
+            face:       { ...config.face },
+            board:      { ...config.board, color: boardColor },
+            hand_left:  { ...config.hand_left },
+            hand_right: { ...config.hand_right },
+            text:       { ...config.text }
+        },
+        textStyle: { ...textStyle },
+        background: JSON.parse(JSON.stringify(background)),
+        layerOrder: [...layerOrder]
+    };
+}
+
+function applyFullConfig(data) {
+    // Layers
+    if (data.config) {
+        if (data.config.face)       config.face       = { ...data.config.face };
+        if (data.config.board)      { config.board    = { ...data.config.board }; boardColor = data.config.board.color ?? boardColor; updateBoardTint(); }
+        if (data.config.hand_left)  config.hand_left  = { ...data.config.hand_left };
+        if (data.config.hand_right) config.hand_right = { ...data.config.hand_right };
+        if (data.config.text)       config.text       = { ...data.config.text };
+    }
+    // Text style
+    if (data.textStyle) {
+        Object.assign(textStyle, data.textStyle);
+        textInput.value            = textStyle.content;
+        textColorInput.value       = textStyle.color;
+        textSize.value             = textStyle.size;
+        textRotation.value         = textStyle.rotation;
+        textRotationVal.textContent = `${textStyle.rotation}°`;
+        document.getElementById("text-opacity").value = textStyle.opacity ?? 1;
+    }
+    // Background
+    if (data.background) {
+        Object.assign(background, data.background);
+        bgTypeSelect.value  = background.type;
+        bgSolidColor.value  = background.color;
+        document.getElementById("bg-solid-opacity").value = background.colorOpacity ?? 1;
+        bgGradType.value    = background.gradType;
+        bgAngle.value       = background.angle;
+        bgAngleVal.textContent = `${background.angle}°`;
+        bgUpdateUI();
+    }
+    // Layer order
+    if (data.layerOrder) layerOrder = [...data.layerOrder];
+    updateInputs();
+}
+
+document.getElementById("save-config").addEventListener("click", () => {
+    const json = JSON.stringify(buildFullConfig(), null, 2);
+    const blob = new Blob([json], { type: "application/json" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = "custom-name-pin-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+});
+
+document.getElementById("load-config").addEventListener("click", () => {
+    const input    = document.createElement("input");
+    input.type     = "file";
+    input.accept   = ".json,application/json";
+    input.addEventListener("change", () => {
+        const file = input.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = e => {
+            try {
+                const data = JSON.parse(e.target.result);
+                applyFullConfig(data);
+            } catch {
+                alert("Invalid config file.");
+            }
+        };
+        reader.readAsText(file);
+    });
+    input.click();
+});
+
+// ── Share via URL hash ───────────────────────────────────────────────────────
+
+document.getElementById("share-btn").addEventListener("click", async () => {
+    const json       = JSON.stringify(buildFullConfig());
+    const compressed = LZString.compressToEncodedURIComponent(json);
+    const url        = `${location.origin}${location.pathname}#share=${compressed}`;
+    await navigator.clipboard.writeText(url);
+    const btn = document.getElementById("share-btn");
+    const orig = btn.textContent;
+    btn.textContent = "✓ Link copied!";
+    setTimeout(() => { btn.textContent = orig; }, 2000);
+});
+
+function restoreFromHash() {
+    const hash = location.hash;
+    if (!hash.startsWith("#share=")) return;
+    try {
+        const compressed = hash.slice("#share=".length);
+        const json       = LZString.decompressFromEncodedURIComponent(compressed);
+        const data       = JSON.parse(json);
+        // Wait for brawler assets to load before applying
+        applyFullConfig(data);
+        // Clear the hash so refreshing doesn't re-apply
+        history.replaceState(null, "", location.pathname);
+    } catch {
+        console.warn("Failed to restore from share link.");
+    }
+}
+
 copyButton.addEventListener("click", async () => {
     const out = {
         face: config.face, hand_left: config.hand_left, hand_right: config.hand_right,
@@ -1900,10 +2013,11 @@ Promise.all([
     new Promise(r=>boardImage.onload=r),
     new Promise(r=>boardOutlineImage.onload=r),
     loadNougat()
-]).then(()=>{
+]).then(async ()=>{
     updateBoardTint();
     contourPaths["board"]=generateContour(boardImage);
     createHitCanvas("board",boardImage);
-    loadBrawlers();
+    await loadBrawlers();
     populateOSFonts();
+    restoreFromHash();
 });
