@@ -76,7 +76,16 @@ function hexToRgba(hex, opacity) {
 function bgDrawBar() {
     const sorted = [...background.stops].sort((a, b) => a.position - b.position);
     const stops  = sorted.map(s => `${hexToRgba(s.color, s.opacity ?? 1)} ${s.position}%`).join(", ");
-    bgGradBar.style.background = `linear-gradient(to right, ${stops})`;
+    const checker = [
+        "linear-gradient(45deg, #ccc 25%, transparent 25%)",
+        "linear-gradient(-45deg, #ccc 25%, transparent 25%)",
+        "linear-gradient(45deg, transparent 75%, #ccc 75%)",
+        "linear-gradient(-45deg, transparent 75%, #ccc 75%)"
+    ].join(", ");
+    bgGradBar.style.backgroundImage    = `linear-gradient(to right, ${stops}), ${checker}`;
+    bgGradBar.style.backgroundSize     = `100% 100%, 8px 8px, 8px 8px, 8px 8px, 8px 8px`;
+    bgGradBar.style.backgroundPosition = `0 0, 0 0, 0 4px, 4px -4px, -4px 0px`;
+    bgGradBar.style.backgroundColor    = "#fff";
 }
 
 // ── Handle rendering ──────────────────────────────────────────────────────────
@@ -407,15 +416,7 @@ let marqueeEnd     = null;
 
 // ── Canvas fit ────────────────────────────────────────────────────────────────
 
-function fitCanvas() {
-    const maxWidth  = window.innerWidth  - 380;
-    const maxHeight = window.innerHeight - 40;
-    const scale = Math.min(maxWidth / canvas.width, maxHeight / canvas.height, 1);
-    canvas.style.width  = `${canvas.width  * scale}px`;
-    canvas.style.height = `${canvas.height * scale}px`;
-}
-fitCanvas();
-window.addEventListener("resize", fitCanvas);
+// Canvas scaling handled by scaleCanvas() defined after layout setup
 
 function getMousePos(e) {
     const rect = canvas.getBoundingClientRect();
@@ -1284,7 +1285,9 @@ copyButton.addEventListener("click", async () => {
             content: textStyle.content, color: textStyle.color,
             font: textStyle.font, size: textStyle.size, rotation: textStyle.rotation,
             opacity: textStyle.opacity
-        }
+        },
+        background: JSON.parse(JSON.stringify(background)),
+        layerOrder: [...layerOrder]
     };
     await navigator.clipboard.writeText(JSON.stringify(out, null, 2));
     alert("Copied");
@@ -2004,8 +2007,99 @@ function syncLayersPanelIfNeeded() {
     if (sig !== lastSelectedLayersSig) {
         lastSelectedLayersSig = sig;
         renderLayersPanel();
+        updateRightPanel();
     }
 }
+
+// ── Theme toggle ──────────────────────────────────────────────────────────────
+
+const themeToggleBtn = document.getElementById("theme-toggle");
+function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    themeToggleBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+    localStorage.setItem("cnp-theme", theme);
+}
+themeToggleBtn.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme");
+    applyTheme(current === "dark" ? "light" : "dark");
+});
+// Apply saved theme on load
+applyTheme(localStorage.getItem("cnp-theme") || "dark");
+
+// ── Canvas scaling ─────────────────────────────────────────────────────────────
+
+function scaleCanvas() {
+    const area = document.getElementById("canvas-area");
+    const pad  = 32;
+    const aw   = area.clientWidth  - pad;
+    const ah   = area.clientHeight - pad;
+    const scale = Math.min(aw / canvas.width, ah / canvas.height, 1);
+    canvas.style.width  = Math.round(canvas.width  * scale) + "px";
+    canvas.style.height = Math.round(canvas.height * scale) + "px";
+}
+window.addEventListener("resize", scaleCanvas);
+// Called once after boot
+
+// ── Context-sensitive right panel ─────────────────────────────────────────────
+
+function updateRightPanel() {
+    const single = getSingleLayer();
+    const noSel  = document.getElementById("no-selection");
+    const bgPanel = document.getElementById("props-background");
+
+    // Hide all layer prop panels
+    document.querySelectorAll(".layer-props").forEach(el => el.classList.remove("active"));
+
+    if (single) {
+        noSel.style.display   = "none";
+        bgPanel.style.display = "";
+        const panel = document.getElementById(`props-${single}`);
+        if (panel) panel.classList.add("active");
+    } else {
+        noSel.style.display   = "";
+        bgPanel.style.display = "";
+    }
+}
+
+// Hook updateRightPanel into syncLayersPanelIfNeeded (already called every frame)
+const _origSync = syncLayersPanelIfNeeded;
+// Patch: also call updateRightPanel whenever panel re-renders
+// We override the signature slightly:
+
+// ── Layer reset ───────────────────────────────────────────────────────────────
+
+document.querySelectorAll(".reset-layer-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        const name = btn.dataset.layer;
+        pushUndo(snapshotConfig());
+
+        if (name === "text") {
+            textStyle.content  = "";
+            textStyle.color    = "#000000";
+            textStyle.font     = "Nougat";
+            textStyle.size     = 72;
+            textStyle.rotation = 0;
+            textStyle.opacity  = 1;
+            config.text.x = 500;
+            config.text.y = 500;
+            textInput.value             = "";
+            textColor.value             = "#000000";
+            textFont.value              = "Nougat";
+            textSize.value              = 72;
+            textRotation.value          = 0;
+            textRotationVal.textContent = "0°";
+            document.getElementById("text-opacity").value = 1;
+        } else if (name === "board") {
+            config.board = defaultLayerConfig();
+            boardColor   = "#ffffff";
+            boardColorInput.value = "#ffffff";
+            updateBoardTint();
+        } else {
+            config[name] = defaultLayerConfig();
+        }
+        updateInputs();
+    });
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 
@@ -2020,4 +2114,6 @@ Promise.all([
     await loadBrawlers();
     populateOSFonts();
     restoreFromHash();
+    scaleCanvas();
+    updateRightPanel();
 });
