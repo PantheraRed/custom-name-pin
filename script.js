@@ -595,27 +595,28 @@ function textHitTest(mouseX, mouseY) {
 // Returns corner index 0-3 or -1
 function rotationHandleHitTest(mouseX, mouseY) {
     if (!hasSelection()) return -1;
-    const corners = selectedLayers.size > 1
-        ? groupAABBCorners()
-        : (getSingleLayer() === "text" ? getTextCorners() : getLayerCorners(getSingleLayer()));
-    if (!corners) return -1;
-    for (let i = 0; i < corners.length; i++) {
-        const dx = mouseX - corners[i].x, dy = mouseY - corners[i].y;
+    // Rotation handles are now at edge midpoints (swapped from corners)
+    const edges = selectedLayers.size > 1
+        ? groupAABBEdges()
+        : (getSingleLayer() === "text" ? getTextEdgeMidpoints() : getLayerEdgeMidpoints(getSingleLayer()));
+    if (!edges) return -1;
+    for (let i = 0; i < edges.length; i++) {
+        const dx = mouseX - edges[i].x, dy = mouseY - edges[i].y;
         if (Math.sqrt(dx*dx + dy*dy) <= HANDLE_RADIUS) return i;
     }
     return -1;
 }
 
-// Returns edge name or -1
+// Returns edge name or -1 — resize handles now at corners
 function resizeHandleHitTest(mouseX, mouseY) {
     if (!hasSelection()) return -1;
-    const edges = selectedLayers.size > 1
-        ? groupAABBEdges()
-        : (getSingleLayer() === "text" ? getTextEdgeMidpoints() : getLayerEdgeMidpoints(getSingleLayer()));
-    if (!edges) return -1;
-    const names = ["top", "right", "bottom", "left"];
-    for (let i = 0; i < edges.length; i++) {
-        const dx = mouseX - edges[i].x, dy = mouseY - edges[i].y;
+    const corners = selectedLayers.size > 1
+        ? groupAABBCorners()
+        : (getSingleLayer() === "text" ? getTextCorners() : getLayerCorners(getSingleLayer()));
+    if (!corners) return -1;
+    const names = ["top-left", "top-right", "bottom-right", "bottom-left"];
+    for (let i = 0; i < corners.length; i++) {
+        const dx = mouseX - corners[i].x, dy = mouseY - corners[i].y;
         if (Math.sqrt(dx*dx + dy*dy) <= EDGE_RADIUS) return names[i];
     }
     return -1;
@@ -804,7 +805,10 @@ function drawTextMarchingAnts() {
 
 // Group selection box — blue dashed AABB
 function drawGroupBox() {
-    const bb = getGroupAABB();
+    // During group rotation, use the frozen start AABB to avoid expansion
+    const bb = (isRotating && groupRotateStart && groupRotateStart.startBB)
+        ? groupRotateStart.startBB
+        : getGroupAABB();
     if (!bb) return;
     ctx.save();
     ctx.strokeStyle    = "#0088ff";
@@ -884,8 +888,8 @@ function drawHandles() {
         const edges   = groupAABBEdges();
         if (!corners || !edges) return;
         const outAngles = [Math.PI*1.25, Math.PI*1.75, Math.PI*0.25, Math.PI*0.75];
-        for (let i = 0; i < 4; i++) drawRotationHandle(corners[i].x, corners[i].y, outAngles[i]);
-        for (let i = 0; i < 4; i++) drawResizeHandle(edges[i].x, edges[i].y);
+        for (let i = 0; i < 4; i++) drawResizeHandle(corners[i].x, corners[i].y);
+        for (let i = 0; i < 4; i++) drawRotationHandle(edges[i].x, edges[i].y, outAngles[i]);
     } else {
         const name  = getSingleLayer();
         const corners = name === "text" ? getTextCorners()      : getLayerCorners(name);
@@ -895,11 +899,11 @@ function drawHandles() {
             ? (textStyle.rotation * Math.PI) / 180
             : (config[name].rotation * Math.PI) / 180;
         const outAngles = [
-            angle+Math.PI*1.25, angle+Math.PI*1.75,
-            angle+Math.PI*0.25, angle+Math.PI*0.75
+            angle+Math.PI*0.0,  angle+Math.PI*0.5,
+            angle+Math.PI*1.0,  angle+Math.PI*1.5
         ];
-        for (let i = 0; i < 4; i++) drawRotationHandle(corners[i].x, corners[i].y, outAngles[i]);
-        for (let i = 0; i < 4; i++) drawResizeHandle(edges[i].x, edges[i].y);
+        for (let i = 0; i < 4; i++) drawResizeHandle(corners[i].x, corners[i].y);
+        for (let i = 0; i < 4; i++) drawRotationHandle(edges[i].x, edges[i].y, outAngles[i]);
     }
 }
 
@@ -1337,6 +1341,7 @@ canvas.addEventListener("mousedown", event => {
             rotateStartRotation = 0;
             groupRotateStart = {
                 centre,
+                startBB: getGroupAABB(),
                 layerStarts: {}
             };
             for (const name of selectedLayers) {
@@ -1511,14 +1516,18 @@ canvas.addEventListener("mousemove", event => {
             const dy   = mouse.y - resizeStartMouse.y;
 
             let scaleX = 1, scaleY = 1;
-            if (resizeEdge === "right")  scaleX = Math.max(0.05, (bbW + dx) / bbW);
-            if (resizeEdge === "left")   scaleX = Math.max(0.05, (bbW - dx) / bbW);
-            if (resizeEdge === "bottom") scaleY = Math.max(0.05, (bbH + dy) / bbH);
-            if (resizeEdge === "top")    scaleY = Math.max(0.05, (bbH - dy) / bbH);
+            const edgeRight  = resizeEdge === "right"  || resizeEdge === "top-right"    || resizeEdge === "bottom-right";
+            const edgeLeft   = resizeEdge === "left"   || resizeEdge === "top-left"     || resizeEdge === "bottom-left";
+            const edgeBottom = resizeEdge === "bottom" || resizeEdge === "bottom-left"  || resizeEdge === "bottom-right";
+            const edgeTop    = resizeEdge === "top"    || resizeEdge === "top-left"     || resizeEdge === "top-right";
+            if (edgeRight)  scaleX = Math.max(0.05, (bbW + dx) / bbW);
+            if (edgeLeft)   scaleX = Math.max(0.05, (bbW - dx) / bbW);
+            if (edgeBottom) scaleY = Math.max(0.05, (bbH + dy) / bbH);
+            if (edgeTop)    scaleY = Math.max(0.05, (bbH - dy) / bbH);
 
-            // Anchor point — opposite edge of group AABB
-            const anchorX = (resizeEdge === "left")  ? bb.maxX : bb.minX;
-            const anchorY = (resizeEdge === "top")   ? bb.maxY : bb.minY;
+            // Anchor point — opposite corner of group AABB
+            const anchorX = edgeLeft  ? bb.maxX : bb.minX;
+            const anchorY = edgeTop   ? bb.maxY : bb.minY;
 
             for (const name of selectedLayers) {
                 const ls = groupResizeStart.layerStarts[name];
@@ -1526,7 +1535,7 @@ canvas.addEventListener("mousemove", event => {
                 const newCy = anchorY + (ls.cy - anchorY) * scaleY;
 
                 if (name === "text") {
-                    const scale = (resizeEdge === "top" || resizeEdge === "bottom") ? scaleY : scaleX;
+                    const scale = (edgeTop || edgeBottom) ? scaleY : scaleX;
                     const newSize = Math.max(8, Math.round(ls.size * scale));
                     textStyle.size = newSize;
                     textSize.value = newSize;
@@ -1552,22 +1561,27 @@ canvas.addEventListener("mousemove", event => {
                 const {lx:lx0,ly:ly0}=canvasToLocal(sc.x+img.width*sc.sx/2, sc.y+img.height*sc.sy/2, angle, resizeStartMouse.x, resizeStartMouse.y);
                 const dLocal={x:lx-lx0, y:ly-ly0};
                 let newSx=sc.sx, newSy=sc.sy;
-                if(resizeEdge==="right")  newSx=Math.max(.05,sc.sx+dLocal.x/img.width);
-                if(resizeEdge==="left")   newSx=Math.max(.05,sc.sx-dLocal.x/img.width);
-                if(resizeEdge==="bottom") newSy=Math.max(.05,sc.sy+dLocal.y/img.height);
-                if(resizeEdge==="top")    newSy=Math.max(.05,sc.sy-dLocal.y/img.height);
+                const eR = resizeEdge==="right"||resizeEdge==="top-right"||resizeEdge==="bottom-right";
+                const eL = resizeEdge==="left" ||resizeEdge==="top-left" ||resizeEdge==="bottom-left";
+                const eB = resizeEdge==="bottom"||resizeEdge==="bottom-left"||resizeEdge==="bottom-right";
+                const eT = resizeEdge==="top"  ||resizeEdge==="top-left" ||resizeEdge==="top-right";
+                if(eR) newSx=Math.max(.05,sc.sx+dLocal.x/img.width);
+                if(eL) newSx=Math.max(.05,sc.sx-dLocal.x/img.width);
+                if(eB) newSy=Math.max(.05,sc.sy+dLocal.y/img.height);
+                if(eT) newSy=Math.max(.05,sc.sy-dLocal.y/img.height);
                 if(locked){
                     const ratio=sc.sy/sc.sx;
-                    if(resizeEdge==="right"||resizeEdge==="left") newSy=newSx*ratio;
+                    if(eR||eL) newSy=newSx*ratio;
                     else newSx=newSy/ratio;
                 }
                 cfg.sx=Math.round(newSx*1000)/1000;
                 cfg.sy=Math.round(newSy*1000)/1000;
                 const newW=img.width*cfg.sx, newH=img.height*cfg.sy;
                 const oldW=img.width*sc.sx,  oldH=img.height*sc.sy;
-                if(resizeEdge==="right"||resizeEdge==="bottom"){ cfg.x=sc.x; cfg.y=sc.y; }
-                else if(resizeEdge==="left"){ cfg.x=sc.x+(oldW-newW); cfg.y=sc.y; }
-                else if(resizeEdge==="top"){  cfg.x=sc.x; cfg.y=sc.y+(oldH-newH); }
+                if(eR||eB){ cfg.x=sc.x; cfg.y=sc.y; }
+                else if(eL&&!eT){ cfg.x=sc.x+(oldW-newW); cfg.y=sc.y; }
+                else if(eT&&!eL){ cfg.x=sc.x; cfg.y=sc.y+(oldH-newH); }
+                else if(eL&&eT){ cfg.x=sc.x+(oldW-newW); cfg.y=sc.y+(oldH-newH); }
                 inp.sx.value=cfg.sx.toFixed(2); inp.sy.value=cfg.sy.toFixed(2);
                 inp.x.value=cfg.x; inp.y.value=cfg.y;
             } else {
@@ -1576,10 +1590,14 @@ canvas.addEventListener("mousemove", event => {
                 const {lx,ly}=canvasToLocal(sc.x,sc.y,angle,mouse.x,mouse.y);
                 const {lx:lx0,ly:ly0}=canvasToLocal(sc.x,sc.y,angle,resizeStartMouse.x,resizeStartMouse.y);
                 let delta=0;
-                if(resizeEdge==="right"||resizeEdge==="left")   delta=lx-lx0;
-                if(resizeEdge==="bottom"||resizeEdge==="top")   delta=ly-ly0;
-                if(resizeEdge==="left"||resizeEdge==="top")     delta=-delta;
-                const halfDim=(resizeEdge==="right"||resizeEdge==="left") ? sc.w/2 : sc.h/2;
+                const tR=resizeEdge==="right"||resizeEdge==="top-right"||resizeEdge==="bottom-right";
+                const tL=resizeEdge==="left" ||resizeEdge==="top-left" ||resizeEdge==="bottom-left";
+                const tB=resizeEdge==="bottom"||resizeEdge==="bottom-left"||resizeEdge==="bottom-right";
+                const tT=resizeEdge==="top"  ||resizeEdge==="top-left" ||resizeEdge==="top-right";
+                if(tR||tL) delta=lx-lx0;
+                if(tB||tT) delta=ly-ly0;
+                if(tL||tT) delta=-delta;
+                const halfDim=(tR||tL) ? sc.w/2 : sc.h/2;
                 const newSize=Math.max(8,Math.round(sc.size*(1+delta/halfDim)));
                 textStyle.size=newSize; textSize.value=newSize;
             }
@@ -1740,7 +1758,7 @@ async function loadBrawlers() {
     const brawlers=await fetch("./assets/brawlers/index.json").then(r=>r.json());
     for(const b of brawlers){
         const opt=document.createElement("option");
-        opt.value=b; opt.textContent=b;
+        opt.value=b; opt.textContent=b.charAt(0).toUpperCase()+b.slice(1);
         brawlerSelect.appendChild(opt);
     }
     if(brawlers.length) await loadBrawler(brawlers[0]);
@@ -1917,6 +1935,27 @@ function renderLayersPanel() {
         row.className = "layer-row" + (selectedLayers.has(name) ? " selected" : "");
         row.draggable = true;
 
+        // Thumbnail
+        const thumb = document.createElement("div");
+        thumb.className = "layer-thumb";
+        const thumbCanvas = document.createElement("canvas");
+        thumbCanvas.width  = 32;
+        thumbCanvas.height = 32;
+        const tc = thumbCanvas.getContext("2d");
+        const img = name === "board" ? boardTintCanvas : images[name];
+        if (name === "text" && textStyle.content) {
+            tc.fillStyle = textStyle.color;
+            tc.font = `bold 18px sans-serif`;
+            tc.textAlign = "center";
+            tc.textBaseline = "middle";
+            tc.fillText(textStyle.content.charAt(0).toUpperCase(), 16, 16);
+        } else if (img) {
+            const scale = Math.min(32 / img.width, 32 / img.height);
+            const dw = img.width * scale, dh = img.height * scale;
+            tc.drawImage(img, (32 - dw) / 2, (32 - dh) / 2, dw, dh);
+        }
+        thumb.appendChild(thumbCanvas);
+
         const label = document.createElement("span");
         label.className = "layer-row-name";
         label.textContent = LAYER_LABELS[name];
@@ -1939,6 +1978,7 @@ function renderLayersPanel() {
         btns.appendChild(upBtn);
         btns.appendChild(downBtn);
 
+        row.appendChild(thumb);
         row.appendChild(label);
         row.appendChild(btns);
 
@@ -2014,16 +2054,40 @@ function syncLayersPanelIfNeeded() {
 // ── Theme toggle ──────────────────────────────────────────────────────────────
 
 const themeToggleBtn = document.getElementById("theme-toggle");
-function applyTheme(theme) {
-    document.documentElement.setAttribute("data-theme", theme);
-    themeToggleBtn.textContent = theme === "dark" ? "☀️" : "🌙";
-    localStorage.setItem("cnp-theme", theme);
+const themePopover   = document.getElementById("theme-popover");
+
+function getSystemTheme() {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
-themeToggleBtn.addEventListener("click", () => {
-    const current = document.documentElement.getAttribute("data-theme");
-    applyTheme(current === "dark" ? "light" : "dark");
+
+function applyTheme(pref) {
+    localStorage.setItem("cnp-theme", pref);
+    const resolved = pref === "system" ? getSystemTheme() : pref;
+    document.documentElement.setAttribute("data-theme", resolved);
+    document.querySelectorAll(".theme-opt").forEach(b => {
+        b.classList.toggle("active", b.dataset.theme === pref);
+    });
+}
+
+themeToggleBtn.addEventListener("click", e => {
+    e.stopPropagation();
+    themePopover.classList.toggle("open");
 });
-// Apply saved theme on load
+
+document.querySelectorAll(".theme-opt").forEach(btn => {
+    btn.addEventListener("click", () => {
+        applyTheme(btn.dataset.theme);
+        themePopover.classList.remove("open");
+    });
+});
+
+document.addEventListener("click", () => themePopover.classList.remove("open"));
+
+// System theme change listener
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => {
+    if (localStorage.getItem("cnp-theme") === "system") applyTheme("system");
+});
+
 applyTheme(localStorage.getItem("cnp-theme") || "dark");
 
 // ── Canvas scaling ─────────────────────────────────────────────────────────────
@@ -2043,22 +2107,20 @@ window.addEventListener("resize", scaleCanvas);
 // ── Context-sensitive right panel ─────────────────────────────────────────────
 
 function updateRightPanel() {
-    const single = getSingleLayer();
-    const noSel  = document.getElementById("no-selection");
-    const bgPanel = document.getElementById("props-background");
+    const single  = getSingleLayer();
+    const noSel   = document.getElementById("no-selection");
 
     // Hide all layer prop panels
     document.querySelectorAll(".layer-props").forEach(el => el.classList.remove("active"));
 
     if (single) {
-        noSel.style.display   = "none";
-        bgPanel.style.display = "";
+        noSel.style.display = "none";
         const panel = document.getElementById(`props-${single}`);
         if (panel) panel.classList.add("active");
     } else {
-        noSel.style.display   = "";
-        bgPanel.style.display = "";
+        noSel.style.display = "";
     }
+    // Background is always visible — no toggling needed
 }
 
 // Hook updateRightPanel into syncLayersPanelIfNeeded (already called every frame)
