@@ -2060,6 +2060,21 @@ function getSystemTheme() {
     return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+const logoCanvas = document.getElementById("topbar-logo");
+
+function drawLogo() {
+    if (!nougat.ready) return;
+    const text     = "Custom Name Pin";
+    const fontSize = 20;
+    const w        = Math.ceil(measureNougatText(text, fontSize)) + 4;
+    logoCanvas.width = w;
+    const lctx = logoCanvas.getContext("2d");
+    lctx.clearRect(0, 0, w, 28);
+    // Use CSS variable color — read computed style from document
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--text").trim() || "#ffffff";
+    drawNougatText(lctx, text, w / 2, 14, fontSize, color);
+}
+
 function applyTheme(pref) {
     localStorage.setItem("cnp-theme", pref);
     const resolved = pref === "system" ? getSystemTheme() : pref;
@@ -2067,6 +2082,8 @@ function applyTheme(pref) {
     document.querySelectorAll(".theme-opt").forEach(b => {
         b.classList.toggle("active", b.dataset.theme === pref);
     });
+    // Redraw logo with updated text color
+    setTimeout(drawLogo, 0);
 }
 
 themeToggleBtn.addEventListener("click", e => {
@@ -2175,6 +2192,7 @@ Promise.all([
     createHitCanvas("board",boardImage);
     await loadBrawlers();
     populateOSFonts();
+    drawLogo();
     restoreFromHash();
     scaleCanvas();
     updateRightPanel();
